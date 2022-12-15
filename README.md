@@ -67,7 +67,7 @@ transformers: v 4.24.0
 
 tqdm: v 4.64.0
 
-## Mask prediction for emoji generation with BERT (*BERT_mask_prediction* folder)
+## Mask prediction for emoji generation with BERT
 
 
 In this section we use BERT-base-cased model from the Hugging Face (https://huggingface.co/bert-base-cased).
