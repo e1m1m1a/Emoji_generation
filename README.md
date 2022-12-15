@@ -1,6 +1,8 @@
 # Emoji Generation
 NLP project SNU fall semester 2022 
+
 This project focuses on using NLP models to add emoji into text.
+
 This repo contains the scripts to fine-tune 3 models for our task.
 
 
@@ -71,4 +73,4 @@ transformers: v 4.24.0
 tqdm: v 4.64.0
 
 
-### Julian Paquerot - Emma Pruvost
+#### Julian Paquerot - Emma Pruvost
