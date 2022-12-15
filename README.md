@@ -5,6 +5,8 @@ This project focuses on using NLP models to add emoji into text.
 
 This repo contains the scripts to fine-tune 3 models for our task.
 
+The pdf of the presentation used in our video is available in this repo under *presentation*.
+
 
 ## Dataset
 The dataset used is *EmojifyData-EN: English tweets, with emojis* taken from Kaggle (https://www.kaggle.com/datasets/rexhaif/emojifydata-en).
