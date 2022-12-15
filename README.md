@@ -13,24 +13,59 @@ The pdf of the presentation used in our video is available in this repo under *p
 The dataset used is *EmojifyData-EN: English tweets, with emojis* taken from Kaggle (https://www.kaggle.com/datasets/rexhaif/emojifydata-en).
 It contains 18 million English tweets.
 
-We used the XXXXXXX script of this repo to preprocess the data and generate the files used for training our models.
+We used the data_preprocessing.py script of this repo to preprocess the data and generate the files used for training our models.
 
 Therefore, to use our fine-tuning scripts, you should first download the dataset and execute the preprocessing script.
 
 
 ## Emoji prediction with RoBERTa
 
+
+In this section we use cardiffnlp/twitter-roberta-base-dec2021 model from the Hugging Face (https://huggingface.co/cardiffnlp/twitter-roberta-base-dec2021) to create the classification model and we also the model "cardiffnlp/twitter-roberta-base-2021-124m-emoji" already trained on the emoji classification task (https://huggingface.co/cardiffnlp/twitter-roberta-base-2021-124m-emoji).
+We finetune the first model on the emoji prediction task and we can use both models to predict emojis.
+
+There is another script called emojional_eval.py that uses a special embedding to enable word2vec to support emojis and perform the emoji prediction task using a word2vec model.
+
+
 ### How to use
+
+Once the dataset are created by the preprocessing script, you can use the *RoBERTa_classification/roberta_classification_model.py* script to fine-tune the model.
+
+Then the evaluation script can be used to evaluate the model on the test set.
+
 
 ### Environment specifications
 
+python: v 3.7.15
+
+torch: v 1.13.0
+
+transformers: v 4.24.0
+
+tqdm: v 4.64.0
 
 ## Translation with T5
 
+
+In this section we use different version of T5 model from the Hugging Face (https://huggingface.co/docs/transformers/model_doc/t5).
+We finetune these models for the translation task between a language without emojis to a language with emojis.
+
+
 ### How to use
+
+Once the dataset are created by the preprocessing script, you can use the *T5_translation/flan-t5-based_model* or *T5_translation/t5-v11_based_model* script to fine-tune the models.
+
+Then the evaluation script can be used to evaluate the model on the test set.
 
 ### Environment specifications
 
+python: v 3.7.15
+
+torch: v 1.13.0
+
+transformers: v 4.24.0
+
+tqdm: v 4.64.0
 
 ## Mask prediction for emoji generation with BERT (*BERT_mask_prediction* folder)
 

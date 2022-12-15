@@ -1,0 +1,191 @@
+# %% Imports
+import torch
+import os
+import pickle as pkl
+from transformers import TrainingArguments, Trainer
+from transformers import DataCollatorWithPadding
+from transformers import AutoModelForSequenceClassification
+from datasets.load import load_dataset, load_from_disk
+from datasets.combine import concatenate_datasets
+from transformers import AutoTokenizer
+from functools import partial
+import emoji
+
+
+# %% Globals
+forced = False  # Force the creation of the tokenizer and datasets even if they already exist
+model_version = '0.1'
+
+test_size = 0.2
+model_max_length = 200
+
+model_name = "twitter-roberta-base-dec2021"
+model_path = "cardiffnlp/twitter-roberta-base-dec2021"
+
+input_data_path = 'dataset/input_data.txt'
+target_data_path = 'dataset/target_data.txt'
+
+hf_dataset_path = 'classif_hf_dataset'
+tokenized_dataset_path = model_name + '_hf_tokenized_dataset'
+tokenizer_path = model_name + '_emoji_tokenizer'
+output_path = f"{model_name}_v_{model_version}_results"
+evaluation_strategy = 'epoch'
+
+resume_from_checkpoint = None
+save_path = output_path + '/final_model'
+
+# Training hyperparameters
+learning_rate = 2e-5
+per_device_train_batch_size = 16
+per_device_eval_batch_size = 16
+weight_decay = 0.01
+save_total_limit = 3
+num_train_epochs = 1
+
+emoji_tokens = pkl.load(open('tokens_list.pkl', 'rb')) + ['emoji'] + ['ℹ']  # Load the new tokens and add emoji because it may not be in the vocabulary and I think it's important
+
+# Create the labels with each emoji in the emoji_tokens list
+emoji_to_labels = {emoji: i for i, emoji in enumerate(emoji_tokens)}
+labels_to_emoji = {i: emoji for i, emoji in enumerate(emoji_tokens)}
+
+
+# %% Model and Tokenizer
+def add_tokens_to_tokenizer(token_list, tokenizer):
+    """Add new tokens to the tokenizer.
+
+    Args:
+        token_list (list): The list of new tokens to add.
+        tokenizer (transformers.tokenization_utils_base.PreTrainedTokenizer): The tokenizer to add the tokens to.
+    """
+    # Let's check if the tokens are already in the vocabulary (spoiler: some are)
+    new_tokens = set(token_list) - set(tokenizer.vocab.keys())
+    tokenizer.add_tokens(list(new_tokens))
+
+
+# %% Untokenized dataset
+def process_dataset(input_data_path, target_data_path):
+    """Process the dataset and save it as a huggingface dataset dictionnary.
+
+    Args:
+        input_data_path (str): The path to the input text file.
+        target_data_path (str): The path to the target text file.
+
+    Returns:
+        datasets.dataset_dict.DatasetDict: The huggingface dataset dictionnary.
+    """
+    print('Processing the dataset...')
+    # First load the input dataset and rename the column
+    input_dataset = load_dataset('text', data_files={'train': input_data_path})
+
+    labels = []
+    with open(target_data_path, 'r') as f:
+        # Only keep the emojis
+        for line in f:
+            # emoji_list = emoji.distinct_emoji_list(line)
+            # label_list = [emoji_to_labels[emoji] for emoji in emoji_list]
+            # labels.append(label_list)
+            emoji_list = emoji.distinct_emoji_list(line)
+            if emoji_list == []:
+                label = 0
+            else:
+                label = emoji_to_labels[emoji_list[-1]]
+            labels.append(label)
+
+    # Add the labels to the dataset
+    dataset = input_dataset['text'].add_column('labels', labels)
+
+    return dataset.train_test_split(test_size=test_size)
+
+
+def preprocess_function(examples, tokenizer):
+    """Tokenize the inputtext with the prefix added at the beggining of the input text.
+
+    Args:
+        examples (dict): The dataset dictionary.
+
+    Returns:
+        dict: The tokenized dataset dictionary.
+    """
+    inputs = [ex for ex in examples["text"]]
+
+    return tokenizer(text=inputs, truncation=True, max_length=model_max_length)
+
+
+# %% Main
+def main():
+    # Load the model
+    model = AutoModelForSequenceClassification.from_pretrained(model_path, num_labels=len(emoji_tokens))
+
+    # Load the tokenizer
+    # Check if the tokenizer already exists
+    if not os.path.exists(tokenizer_path) or forced:
+        tokenizer = AutoTokenizer.from_pretrained(model_path, model_max_length=model_max_length)
+
+        # Add the new tokens to the tokenizer and save
+        add_tokens_to_tokenizer(emoji_tokens, tokenizer)
+        tokenizer.save_pretrained(tokenizer_path)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, model_max_length=model_max_length)
+
+    # Let's add new, random embeddings for the new tokens
+    model.resize_token_embeddings(len(tokenizer))
+
+    print('Tokenizer loaded')
+
+    # Load the dataset (not tokenized yet)
+    # Check if the dataset already exists
+    if not os.path.exists(hf_dataset_path) or forced:
+        # Process the dataset and save
+        dataset = process_dataset(input_data_path, target_data_path)
+        dataset.save_to_disk(hf_dataset_path)
+    else:
+        dataset = load_from_disk(hf_dataset_path)
+
+    print('Untokenized dataset loaded')
+
+    # Load the tokenized dataset
+    # Check if the tokenized dataset already exists
+    if not os.path.exists(tokenized_dataset_path) or forced:
+        # Tokenize the dataset and save
+        tokenized_dataset = dataset.map(partial(preprocess_function, tokenizer=tokenizer), batched=True)  # The partial function is used to pass the tokenizer to the preprocess_function
+        tokenized_dataset.save_to_disk(tokenized_dataset_path)
+    else:
+        tokenized_dataset = load_from_disk(tokenized_dataset_path)
+
+    print('Tokenized dataset loaded')
+
+    # Load the data collector, trainer and training arguments
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+    training_args = TrainingArguments(
+        output_dir=output_path,
+        evaluation_strategy=evaluation_strategy,
+        learning_rate=learning_rate,
+        per_device_train_batch_size=per_device_train_batch_size,
+        per_device_eval_batch_size=per_device_eval_batch_size,
+        weight_decay=weight_decay,
+        save_total_limit=save_total_limit,
+        num_train_epochs=num_train_epochs,
+        fp16=True,  # Uncomment this if you have a GPU with CUDA
+        # remove_unused_columns=False
+        # load_best_model_at_end=True,
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=tokenized_dataset["train"],
+        eval_dataset=tokenized_dataset["test"],
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+    )
+
+    # Finally train the model and save
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    trainer.save_model(save_path)
+
+
+if __name__ == '__main__':
+    main()
+
+# %%
